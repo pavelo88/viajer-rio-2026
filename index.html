@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planificador Maestro: Río de Janeiro 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin: 0 auto; height: 350px; max-height: 400px; }
+        .table-scroll::-webkit-scrollbar { height: 8px; }
+        .table-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .fade-enter { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Custom radio button styles for budget selection */
+        .budget-radio:checked + label { background-color: #0f766e; color: white; border-color: #0f766e; }
+    </style>
+    <!-- Chosen Palette: Tropical Slate (Slate backgrounds, Teal/Emerald primary for nature/ocean vibe, warm accents) -->
+    <!-- Application Structure Plan: 
+         1. Header & Context: Sets the stage (2026 data, conversion rate).
+         2. Master Controls: Two distinct filter blocks (Duration: 5/7 days) x (Budget: 5 levels). This creates the 10 requested scenarios.
+         3. Dashboard: High-level financial summary (Total, Daily Avg) + Expense Distribution Chart.
+         4. Detailed Itinerary Feed: A timeline/card view showing EXACTLY what happens each day, locations, and descriptions, solving the user's main complaint about lack of context.
+         5. Financial Matrix Table: The requested detailed day-by-day table showing costs per category per day.
+         6. Official Links: Section with URLs to verify projection accuracy. -->
+    <!-- Visualization & Content Choices: 
+         - Master Controls -> Custom Radio Buttons -> Goal: Easy switching between the 10 scenarios.
+         - Expense Distribution -> Donut Chart (Chart.js) -> Goal: Visual breakdown of budget allocation per scenario.
+         - Itinerary -> HTML Cards with Icons -> Goal: Provide the narrative of the trip (Copacabana, Selarón, etc.).
+         - Financial Matrix -> HTML Table (JS Generated) -> Goal: Satisfy the strict data requirement (Day 1, Day 2 costs).
+         - CONFIRMING: NO SVG graphics used. Canvas used for charts. HTML/Unicode used for icons. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="antialiased pb-12">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white py-10 px-6 shadow-lg">
+        <div class="max-w-7xl mx-auto">
+            <h1 class="text-3xl md:text-5xl font-bold mb-3 tracking-tight">Planificador Maestro: Río 2026</h1>
+            <p class="text-slate-300 text-lg md:text-xl max-w-4xl mb-6">
+                Explora 10 escenarios detallados para tu viaje. Selecciona la duración y tu estilo de presupuesto para ver actividades diarias, descripciones y costos exactos proyectados.
+            </p>
+            <div class="flex flex-wrap gap-4 text-sm">
+                <div class="bg-slate-800 rounded px-3 py-1.5 border border-slate-700">🗓️ <b>Fechas base:</b> 10 al 30 de abril 2026</div>
+                <div class="bg-slate-800 rounded px-3 py-1.5 border border-slate-700">💱 <b>Tasa Proyectada:</b> 1 USD = 5.20 BRL</div>
+                <div class="bg-slate-800 rounded px-3 py-1.5 border border-slate-700">👤 <b>Viajeros:</b> 1 Persona</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 mt-8 space-y-8">
+        
+        <!-- CONTROL PANEL: 2 Filters -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 border-b pb-2">1. Configura tu Viaje</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <!-- Filter 1: Duration -->
+                <div class="lg:col-span-4">
+                    <label class="block text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">Duración del Viaje</label>
+                    <div class="flex gap-3">
+                        <button id="btn-dur-5" onclick="setDuration(5)" class="flex-1 py-3 px-4 rounded-xl font-medium border-2 border-teal-600 bg-teal-600 text-white transition-all">4 Noches / 5 Días</button>
+                        <button id="btn-dur-7" onclick="setDuration(7)" class="flex-1 py-3 px-4 rounded-xl font-medium border-2 border-slate-200 text-slate-600 hover:border-teal-300 transition-all">6 Noches / 7 Días</button>
+                    </div>
+                </div>
+
+                <!-- Filter 2: Budget Profile -->
+                <div class="lg:col-span-8">
+                    <label class="block text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">Nivel de Presupuesto</label>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="budget-selectors">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+            
+            <div id="profile-description" class="mt-6 p-4 bg-slate-50 rounded-lg text-slate-600 text-sm border border-slate-100 flex items-start gap-3">
+                <span class="text-xl">ℹ️</span>
+                <p id="profile-desc-text"></p>
+            </div>
+        </section>
+
+        <!-- DASHBOARD SUMMARY -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Totals -->
+            <div class="lg:col-span-1 flex flex-col gap-4">
+                <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 h-full flex flex-col justify-center relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-teal-50 rounded-bl-full -z-10"></div>
+                    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Costo Total Proyectado</h3>
+                    <div class="text-5xl font-bold text-slate-800 mb-2" id="sum-usd">$0</div>
+                    <div class="text-xl text-slate-500 mb-4" id="sum-brl">R$ 0</div>
+                    <div class="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center text-sm">
+                        <span class="text-slate-500">Promedio Diario (sin hoteles):</span>
+                        <span class="font-bold text-teal-700" id="avg-daily">$0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
+                <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Distribución del Presupuesto</h3>
+                <div class="chart-container">
+                    <canvas id="budgetChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- DETAILED ITINERARY -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-end">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">2. Itinerario Detallado de Actividades</h2>
+                    <p class="text-slate-500 text-sm mt-1">Lo que harás, dónde, y los costos asignados para este nivel.</p>
+                </div>
+            </div>
+            <div class="p-6 space-y-6" id="itinerary-feed">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- FINANCIAL MATRIX TABLE -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-6 border-b border-slate-100 bg-slate-50">
+                <h2 class="text-2xl font-bold text-slate-800">3. Matriz de Costos Diarios (En USD)</h2>
+                <p class="text-slate-500 text-sm mt-1">Desglose financiero día por día según el perfil seleccionado.</p>
+            </div>
+            <div class="p-6 table-scroll overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                        <tr id="matrix-header" class="text-sm font-semibold text-slate-500 border-b-2 border-slate-200">
+                            <!-- JS -->
+                        </tr>
+                    </thead>
+                    <tbody id="matrix-body" class="text-sm">
+                        <!-- JS -->
+                    </tbody>
+                    <tfoot id="matrix-footer" class="bg-slate-50 font-bold border-t-2 border-slate-200 text-slate-800">
+                        <!-- JS -->
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <!-- OFFICIAL RESOURCES -->
+        <section class="bg-slate-800 rounded-2xl shadow-sm p-6 text-white">
+            <h2 class="text-xl font-bold mb-4">🔗 Enlaces Oficiales de Verificación (2026)</h2>
+            <p class="text-slate-300 text-sm mb-4">Utiliza estos enlaces para verificar las tarifas exactas de tickets y transporte a medida que se acerque tu viaje.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div class="bg-slate-700 p-4 rounded-lg">
+                    <div class="font-semibold mb-1">🚇 MetroRio y BRT</div>
+                    <a href="https://www.metrorio.com.br/" target="_blank" class="text-teal-400 hover:underline">metrorio.com.br</a>
+                </div>
+                <div class="bg-slate-700 p-4 rounded-lg">
+                    <div class="font-semibold mb-1">⛰️ Cristo (Trem do Corcovado)</div>
+                    <a href="https://www.tremdocorcovado.rio/" target="_blank" class="text-teal-400 hover:underline">tremdocorcovado.rio</a>
+                </div>
+                <div class="bg-slate-700 p-4 rounded-lg">
+                    <div class="font-semibold mb-1">🚠 Pan de Azúcar (Parque Bondinho)</div>
+                    <a href="https://bondinho.com.br/" target="_blank" class="text-teal-400 hover:underline">bondinho.com.br</a>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- 1. CONFIGURATION & DATA DICTIONARY ---
+        const RATE = 5.20; // 1 USD = 5.20 BRL (Proyección 2026)
+
+        // The 5 Budget Profiles
+        const profiles = {
+            p1: { id: 'p1', name: '1. Mochilero', icon: '🎒', desc: 'Hospedaje en hostales compartidos. Comida comprada en supermercados, "podrões" (comida callejera) y snacks. Movilidad exclusiva en Metro/Bus y a pie. Visitas panorámicas gratuitas, tickets solo a lo indispensable.',
+                  costs: { lodging: 70, foodBase: 70, transBase: 15, attrMult: 0.5, style: 'Básico' } },
+            p2: { id: 'p2', name: '2. Económico', icon: '👟', desc: 'Habitación privada en Airbnb modesto o Hotel 2★. Almuerzos de "Prato Feito" (menú ejecutivo local) y fast food. Transporte público con Uber ocasional de noche. Tickets de atracciones en formato estándar.',
+                  costs: { lodging: 200, foodBase: 130, transBase: 35, attrMult: 1.0, style: 'Estándar' } },
+            p3: { id: 'p3', name: '3. Estándar', icon: '🧳', desc: 'Hoteles 3-4★ confortables en Copacabana/Ipanema. Restaurantes por kilo al mediodía y a la carta sencillos de noche. Mezcla equilibrada de Uber y Metro. Tickets estándar + algún extra como audioguía.',
+                  costs: { lodging: 480, foodBase: 240, transBase: 80, attrMult: 1.0, style: 'Confort' } },
+            p4: { id: 'p4', name: '4. Confort', icon: '🍸', desc: 'Hoteles 4★ Premium (vistas al mar). Restaurantes reconocidos a la carta todos los días, caipirinhas en bares de buen nivel. Movilidad casi exclusiva en Uber/Taxi. Accesos rápidos/Tours guiados a atracciones.',
+                  costs: { lodging: 950, foodBase: 450, transBase: 160, attrMult: 1.5, style: 'Premium' } },
+            p5: { id: 'p5', name: '5. Lujo', icon: '💎', desc: 'Hoteles 5★ icónicos (ej. Copacabana Palace o Fasano). Alta gastronomía (restaurantes estrella Michelin, cenas exclusivas). Transfers privados. Tours privados (guía bilingüe, paseos en yate/helicóptero).',
+                  costs: { lodging: 2800, foodBase: 900, transBase: 350, attrMult: 3.5, style: 'VIP' } }
+        };
+
+        // Base Attraction Data (Standard BRL Prices for 2026)
+        const attractionsDB = {
+            cristo: { name: 'Cristo Redentor', baseCost: 150 },
+            pao: { name: 'Pan de Azúcar', baseCost: 200 },
+            maracana: { name: 'Maracanã Tour', baseCost: 90 },
+            botanico: { name: 'Jardín Botánico', baseCost: 85 },
+            buzios: { name: 'Excursión a Búzios', baseCost: 280 }
+        };
+
+        // Itinerary Base Narratives
+        const narratives = [
+            { 
+                day: 1, 
+                title: 'Llegada & Reconocimiento de Playas', 
+                loc: 'Zona Sur (Copacabana / Ipanema)', 
+                desc: 'Llegada al alojamiento. Tarde libre para caminar por la famosa "orla" (paseo marítimo) de Copacabana. Ideal para tomar la primera agua de coco o caipirinha mirando el mar y cenar por la zona.',
+                attrKeys: [] 
+            },
+            { 
+                day: 2, 
+                title: 'Iconos y Cultura Carioca', 
+                loc: 'Corcovado & Centro/Lapa', 
+                desc: 'Mañana dedicada a subir al Cristo Redentor atravesando la selva de Tijuca. Por la tarde, visita al barrio bohemio de Santa Teresa y descenso por las coloridas Escalinatas de Selarón en Lapa.',
+                attrKeys: ['cristo'] 
+            },
+            { 
+                day: 3, 
+                title: 'Atardecer de Película', 
+                loc: 'Urca & Botafogo', 
+                desc: 'Mañana relajada en la Praia Vermelha. Por la tarde, ascenso en teleférico al Pan de Azúcar para ver uno de los mejores atardeceres del mundo. Cena en el barrio de Botafogo.',
+                attrKeys: ['pao'] 
+            },
+            { 
+                day: 4, 
+                title: 'Pasión y Futuro', 
+                loc: 'Maracanã & Porto Maravilha', 
+                desc: 'Mañana futbolera con el tour guiado por el mítico Estadio Maracanã. Tarde en el renovado puerto: visita exterior (o interior) al futurista Museu do Amanhã y la noria Yup Star.',
+                attrKeys: ['maracana'] 
+            },
+            // Day 5 splits based on duration
+            { 
+                day: 5, 
+                title: 'Naturaleza y Elegancia', 
+                loc: 'Jardín Botánico & Leblon', 
+                desc: 'Paseo matutino entre las palmeras imperiales del Jardín Botánico y el Parque Lage. Tarde de playa en Leblon (zona más exclusiva) y compras de souvenirs.',
+                attrKeys: ['botanico'] 
+            },
+            { 
+                day: 6, 
+                title: 'Escapada Fuera de la Ciudad', 
+                loc: 'Búzios o Angra dos Reis', 
+                desc: 'Día completo de excursión. Salida muy temprano hacia la costa (Búzios o región de islas de Angra). Incluye paseo en barco (escuna), paradas para nadar y almuerzo.',
+                attrKeys: ['buzios'] 
+            },
+            { 
+                day: 7, 
+                title: 'Despedida Carioca', 
+                loc: 'Zona Sur / Aeropuerto', 
+                desc: 'Último desayuno brasileño. Mañana libre para últimas compras (Havaianas, café) o un último baño en Ipanema antes de tomar el transporte al aeropuerto (GIG o SDU).',
+                attrKeys: [] 
+            }
+        ];
+
+        // --- 2. STATE MANAGEMENT ---
+        let currentDuration = 5;
+        let currentProfileId = 'p3';
+        let currentChart = null;
+
+        // --- 3. UI INITIALIZATION & EVENT HANDLERS ---
+        function initApp() {
+            // Build Budget Selectors
+            const budgetContainer = document.getElementById('budget-selectors');
+            let html = '';
+            for (const key in profiles) {
+                const p = profiles[key];
+                html += `
+                    <div>
+                        <input type="radio" name="budget" id="${key}" value="${key}" class="hidden budget-radio" ${key === currentProfileId ? 'checked' : ''} onchange="setProfile('${key}')">
+                        <label for="${key}" class="block w-full text-center py-2 px-1 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors text-sm font-medium text-slate-600">
+                            <span class="block text-xl mb-1">${p.icon}</span>
+                            ${p.name.split(' ')[1]}
+                        </label>
+                    </div>
+                `;
+            }
+            budgetContainer.innerHTML = html;
+            
+            updateView();
+        }
+
+        function setDuration(days) {
+            currentDuration = days;
+            // Update UI buttons
+            document.getElementById('btn-dur-5').className = days === 5 ? "flex-1 py-3 px-4 rounded-xl font-medium border-2 border-teal-600 bg-teal-600 text-white transition-all shadow-md" : "flex-1 py-3 px-4 rounded-xl font-medium border-2 border-slate-200 text-slate-600 hover:border-teal-300 transition-all";
+            document.getElementById('btn-dur-7').className = days === 7 ? "flex-1 py-3 px-4 rounded-xl font-medium border-2 border-teal-600 bg-teal-600 text-white transition-all shadow-md" : "flex-1 py-3 px-4 rounded-xl font-medium border-2 border-slate-200 text-slate-600 hover:border-teal-300 transition-all";
+            updateView();
+        }
+
+        function setProfile(profileId) {
+            currentProfileId = profileId;
+            updateView();
+        }
+
+        // --- 4. DATA PROCESSING & RENDERING ---
+        function generateItineraryData() {
+            const profile = profiles[currentProfileId];
+            let schedule = [];
+            
+            // Generate sequence based on duration
+            let sequence = [];
+            if (currentDuration === 5) {
+                sequence = [narratives[0], narratives[1], narratives[2], narratives[3], {...narratives[6], day: 5}]; // Departure is day 5
+            } else {
+                sequence = [narratives[0], narratives[1], narratives[2], narratives[3], {...narratives[5], day: 5}, {...narratives[4], day: 6}, narratives[6]];
+            }
+
+            sequence.forEach((narr, index) => {
+                const isFirstDay = index === 0;
+                const isLastDay = index === sequence.length - 1;
+                
+                // Calculate costs for this specific day
+                let lodging = isLastDay ? 0 : profile.costs.lodging; // No hotel on departure day
+                let food = profile.costs.foodBase;
+                if (isFirstDay || isLastDay) food = food * 0.7; // Less food cost on travel days
+
+                let trans = profile.costs.transBase;
+                if (isFirstDay || isLastDay) trans = trans + (profile.costs.transBase * 1.5); // Add airport transfer estimate
+                if (narr.attrKeys.includes('buzios')) trans = 0; // Transportation included in excursion
+
+                let attrCost = 0;
+                let attrNames = [];
+                narr.attrKeys.forEach(key => {
+                    const base = attractionsDB[key].baseCost;
+                    const mod = profile.costs.attrMult;
+                    // Special logic: Backpacker might skip Pao de Acucar or do a free hike
+                    let finalAttrCost = base * mod;
+                    if (currentProfileId === 'p1' && key === 'pao') finalAttrCost = 0; // Walks around Urca instead
+                    
+                    if (finalAttrCost > 0) {
+                        attrCost += finalAttrCost;
+                        let modifierText = mod > 1 ? ' (VIP/Guiado)' : '';
+                        attrNames.push(attractionsDB[key].name + modifierText);
+                    } else if (currentProfileId === 'p1') {
+                         attrNames.push(attractionsDB[key].name + ' (Visto desde exterior/Gratis)');
+                    }
+                });
+
+                schedule.push({
+                    dayNum: index + 1,
+                    title: narr.title,
+                    loc: narr.loc,
+                    desc: narr.desc,
+                    attrDesc: attrNames.length > 0 ? attrNames.join(' + ') : 'Sin tickets requeridos',
+                    costs: { lodging, food, trans, attr: attrCost }
+                });
+            });
+
+            return { profile, schedule };
+        }
+
+        function updateView() {
+            const data = generateItineraryData();
+            
+            // Update Profile Description
+            document.getElementById('profile-desc-text').innerHTML = `<strong>${data.profile.name}:</strong> ${data.profile.desc}`;
+
+            // Calculate Totals
+            let totals = { lodging: 0, food: 0, trans: 0, attr: 0 };
+            data.schedule.forEach(day => {
+                totals.lodging += day.costs.lodging;
+                totals.food += day.costs.food;
+                totals.trans += day.costs.trans;
+                totals.attr += day.costs.attr;
+            });
+            const grandTotalBRL = totals.lodging + totals.food + totals.trans + totals.attr;
+            const grandTotalUSD = grandTotalBRL / RATE;
+            
+            const dailyAvgUSD = ((totals.food + totals.trans + totals.attr) / RATE) / currentDuration;
+
+            // Update Dashboard
+            animateValue("sum-usd", grandTotalUSD, true);
+            document.getElementById('sum-brl').innerText = `R$ ${grandTotalBRL.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+            document.getElementById('avg-daily').innerText = formatUSD(dailyAvgUSD) + ' / día';
+
+            updateChart([totals.lodging, totals.food, totals.trans, totals.attr]);
+            renderItinerary(data);
+            renderMatrix(data);
+        }
+
+        function renderItinerary(data) {
+            const container = document.getElementById('itinerary-feed');
+            container.innerHTML = '';
+
+            data.schedule.forEach(day => {
+                const dayTotalUSD = (day.costs.lodging + day.costs.food + day.costs.trans + day.costs.attr) / RATE;
+                
+                const html = `
+                    <div class="flex gap-4 fade-enter border border-slate-100 rounded-xl p-4 hover:shadow-md transition-shadow bg-white">
+                        <div class="flex-shrink-0 flex flex-col items-center">
+                            <div class="w-12 h-12 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-lg border-2 border-teal-200">
+                                D${day.dayNum}
+                            </div>
+                            ${day.dayNum !== data.schedule.length ? '<div class="w-0.5 h-full bg-slate-200 mt-2"></div>' : ''}
+                        </div>
+                        <div class="flex-grow pb-2">
+                            <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+                                <div>
+                                    <h4 class="text-lg font-bold text-slate-800">${day.title}</h4>
+                                    <span class="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-1 rounded">📍 ${day.loc}</span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-bold text-slate-800">${formatUSD(dayTotalUSD)}</div>
+                                    <div class="text-xs text-slate-400">Total Día</div>
+                                </div>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-3">${day.desc}</p>
+                            <div class="bg-slate-50 p-3 rounded border border-slate-100 text-xs text-slate-500">
+                                <strong>Actividades/Tickets:</strong> ${day.attrDesc} <br>
+                                <div class="mt-1 flex gap-3 opacity-80">
+                                    <span>🏨 ${formatUSD(day.costs.lodging/RATE)}</span>
+                                    <span>🍽️ ${formatUSD(day.costs.food/RATE)}</span>
+                                    <span>🚕 ${formatUSD(day.costs.trans/RATE)}</span>
+                                    <span>🎟️ ${formatUSD(day.costs.attr/RATE)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        function renderMatrix(data) {
+            const head = document.getElementById('matrix-header');
+            const body = document.getElementById('matrix-body');
+            const foot = document.getElementById('matrix-footer');
+
+            // Head
+            let headHTML = '<th class="py-4 px-4 min-w-[150px]">Categoría</th>';
+            for (let i = 1; i <= currentDuration; i++) {
+                headHTML += `<th class="py-4 px-2 text-center">Día ${i}</th>`;
+            }
+            headHTML += '<th class="py-4 px-4 text-right">Total USD</th>';
+            head.innerHTML = headHTML;
+
+            // Body
+            const cats = [
+                { key: 'lodging', name: 'Hospedaje', icon: '🏨' },
+                { key: 'food', name: 'Alimentación', icon: '🍽️' },
+                { key: 'trans', name: 'Transporte', icon: '🚕' },
+                { key: 'attr', name: 'Atracciones', icon: '🎟️' }
+            ];
+
+            let bodyHTML = '';
+            cats.forEach(cat => {
+                bodyHTML += `<tr class="border-b border-slate-100 hover:bg-slate-50">`;
+                bodyHTML += `<td class="py-3 px-4 font-medium text-slate-700">${cat.icon} ${cat.name}</td>`;
+                
+                let rowTotal = 0;
+                data.schedule.forEach(day => {
+                    const valUSD = day.costs[cat.key] / RATE;
+                    rowTotal += valUSD;
+                    bodyHTML += `<td class="py-3 px-2 text-center text-slate-600">${valUSD > 0 ? formatUSD(valUSD) : '-'}</td>`;
+                });
+                bodyHTML += `<td class="py-3 px-4 text-right font-semibold text-slate-800">${formatUSD(rowTotal)}</td>`;
+                bodyHTML += `</tr>`;
+            });
+            body.innerHTML = bodyHTML;
+
+            // Foot
+            let footHTML = '<tr><td class="py-4 px-4">Total Diario</td>';
+            let grandTotal = 0;
+            data.schedule.forEach(day => {
+                const dayTotalUSD = (day.costs.lodging + day.costs.food + day.costs.trans + day.costs.attr) / RATE;
+                grandTotal += dayTotalUSD;
+                footHTML += `<td class="py-4 px-2 text-center text-teal-700">${formatUSD(dayTotalUSD)}</td>`;
+            });
+            footHTML += `<td class="py-4 px-4 text-right text-lg text-teal-800">${formatUSD(grandTotal)}</td></tr>`;
+            foot.innerHTML = footHTML;
+        }
+
+        function updateChart(valuesBRL) {
+            const ctx = document.getElementById('budgetChart').getContext('2d');
+            const valuesUSD = valuesBRL.map(v => v / RATE);
+
+            if (currentChart) {
+                currentChart.data.datasets[0].data = valuesUSD;
+                currentChart.update();
+                return;
+            }
+
+            currentChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Hospedaje', 'Alimentación', 'Transporte', 'Atracciones/Tours'],
+                    datasets: [{
+                        data: valuesUSD,
+                        backgroundColor: ['#334155', '#0f766e', '#cbd5e1', '#14b8a6'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { usePointStyle: true, padding: 20, font: {family: 'Inter'} } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed !== null) {
+                                        label += formatUSD(context.parsed);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // --- UTILITIES ---
+        function formatUSD(val) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
+        }
+
+        // Simple animation for numbers
+        function animateValue(id, end, isCurrency) {
+            const obj = document.getElementById(id);
+            // Quick set to avoid complex animation logic holding up UI, but adds a little flash
+            obj.style.opacity = 0;
+            setTimeout(() => {
+                obj.innerText = formatUSD(end);
+                obj.style.opacity = 1;
+                obj.style.transition = 'opacity 0.3s';
+            }, 50);
+        }
+
+        // Run
+        window.onload = initApp;
+    </script>
+</body>
+</html>
