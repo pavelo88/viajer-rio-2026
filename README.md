@@ -1,1 +1,1 @@
-# viajer-rio-2026
+# viaje-rio-2026
